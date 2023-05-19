@@ -54,4 +54,22 @@ export async function visitUrl(req, res) {
     } catch (err) {
         res.status(500).send(err.message);
     }
+};
+
+export async function deleteUrl(req, res){
+    const user = res.locals.user;
+    const { id } = req.params;
+
+    try {
+        const url = await db.query(`SELECT * FROM urls WHERE id=$1;`, [id]);
+        if(!url.rowCount) return res.sendStatus(404);
+
+        if(url.rows[0].userId !== user.id) return res.sendStatus(401);
+
+        await db.query(`DELETE FROM urls WHERE id=$1;`, [id]);
+
+        res.sendStatus(204);
+    } catch(err){
+        res.status(500).send(err.message);
+    }
 }
