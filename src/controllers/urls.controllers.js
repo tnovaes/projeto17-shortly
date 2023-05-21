@@ -45,8 +45,8 @@ export async function visitUrl(req, res) {
         UPDATE urls 
         SET "visitCount" = "visitCount"+1 
         WHERE "shortUrl"=$1 
-        RETURNING url;`,
-            [shortUrl]);
+        RETURNING url;`
+        , [shortUrl]);
 
         if(!visitUrl.rowCount) return res.sendStatus(404);
 

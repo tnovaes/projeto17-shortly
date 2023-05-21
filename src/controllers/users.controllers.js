@@ -1,41 +1,44 @@
 import { db } from "../database/database.connection.js";
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 
-export async function signup(req, res) {
-    const { name, email, password } = req.body;
+export async function getUserData(req, res) {
+    const user = res.locals.user;
 
     try {
-        const emailVerification = await db.query(`SELECT * FROM users WHERE email = $1;`, [email]);
-        if (emailVerification.rowCount) return res.status(409).send("Email already registered");
+        const userData = await db.query(`
+        SELECT users.id, users.name, COALESCE(SUM(urls."visitCount"), 0) AS "visitCount",
+        CASE
+            WHEN COUNT(urls.id) > 0
+            THEN json_agg(json_build_object(
+                'id', urls.id, 
+                'shortUrl', urls."shortUrl", 
+                'url', urls.url, 
+                'visitCount', urls."visitCount"))
+            ELSE NULL
+        END AS "shortenedUrls"
+        FROM users
+        LEFT JOIN urls ON urls."userId" = users.id
+        WHERE users.id = $1
+        GROUP BY users.id;
+        `, [user.id]);
 
-        const hash = bcrypt.hashSync(password, 10);
-
-        await db.query(`
-        INSERT INTO users (name, email, password) 
-            VALUES ($1, $2, $3);`, [name, email, hash]);
-
-        res.sendStatus(201);
+        res.status(200).send(userData.rows[0]);
     } catch (err) {
         res.status(500).send(err.message);
     }
 };
 
-export async function signIn(req, res) {
-
-    const { email, password } = req.body;
-
+export async function getRanking(req, res) {
     try {
-        const user = await db.query(`SELECT * FROM users WHERE email = $1;`, [email]);
-        if (!user.rowCount || !bcrypt.compareSync(password, user.rows[0].password)) return res.status(401).send("Incorrect email/password");
+        const ranking = await db.query(`
+        SELECT users.id, users.name, COUNT(urls.id) AS "linksCount", COALESCE(SUM(urls."visitCount"), 0) AS "visitCount"
+        FROM users
+        LEFT JOIN urls ON urls."userId" = users.id
+        GROUP BY users.id
+        ORDER BY "visitCount" DESC
+        LIMIT 10;`);
 
-        const data = { email: email }
-        const key = process.env.JWT_SECRET || "jwt_public_key";
-
-        const token = jwt.sign(data, key);
-
-        res.status(200).send(token);
+        res.status(200).send(ranking.rows);
     } catch (err) {
         res.status(500).send(err.message);
     }
-};
+}
